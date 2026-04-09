@@ -62,7 +62,7 @@ def test_energy_prevents_expensive_card_play():
     state = play_battle(deck=deck, enemy=enemy, turns=1, energy_per_turn=1, chooser=chooser)
 
     turn = state.history[0]
-    assert turn.card_name == "Skip"
+    assert turn.card_names == ["Skip"]
     assert turn.note.startswith("Insufficient energy")
 
 
@@ -75,5 +75,38 @@ def test_invalid_selection_is_guarded():
     state = play_battle(deck=starter_deck(), enemy=enemy, turns=1, chooser=chooser)
 
     turn = state.history[0]
-    assert turn.card_name == "Skip"
+    assert turn.card_names == ["Skip"]
     assert turn.note.startswith("Invalid selection index")
+
+
+def test_turn_can_play_multiple_cards():
+    enemy = starter_enemies()[0]
+
+    def chooser(_seq, _enemy, _turn, _hand, _energy):
+        return 0
+
+    deck = [
+        Card("Plus One", lambda s: s + [1], cost=1),
+        Card("Plus Two", lambda s: s + [2], cost=1),
+        Card("Plus Three", lambda s: s + [3], cost=1),
+    ]
+    state = play_battle(deck=deck, enemy=enemy, turns=1, energy_per_turn=3, chooser=chooser)
+
+    turn = state.history[0]
+    assert turn.card_names == ["Plus One", "Plus Two", "Plus Three"]
+    assert turn.energy_after == 0
+    assert state.sequence == [1, 1, 2, 3]
+
+
+def test_exhaust_card_moves_to_exhaust_pile():
+    enemy = starter_enemies()[0]
+
+    def chooser(_seq, _enemy, _turn, _hand, _energy):
+        return 0
+
+    deck = [Card("One Shot", lambda s: s + [9], cost=1, exhaust_on_play=True)]
+    state = play_battle(deck=deck, enemy=enemy, turns=1, energy_per_turn=1, chooser=chooser)
+
+    assert len(state.deck_state.exhaust_pile) == 1
+    assert state.deck_state.exhaust_pile[0].name == "One Shot"
+    assert state.deck_state.discard_pile == []

@@ -10,6 +10,8 @@ This repository now includes a minimal combat loop with:
 - A starter deck of sequence-operation cards.
 - Hand / draw / discard deck flow.
 - Per-turn energy and card costs.
+- Multi-card turns while energy remains.
+- Card exhaust behavior for one-shot effects.
 - A few enemies with constraints + scoring functions.
 - Turn-by-turn battle logging.
 
@@ -47,7 +49,6 @@ See `ROADMAP.md` for milestone planning and an actionable sprint backlog.
 
 ## Next implementation steps
 
-1. Expand play actions to support multi-card turns and card exhaust behavior.
-2. Add enemy “anti-cards” that disrupt sequence state.
-3. Add map nodes + run progression.
-4. Build a basic web UI for sequence visualization.
+1. Add enemy “anti-cards” that disrupt sequence state.
+2. Add map nodes + run progression.
+3. Build a basic web UI for sequence visualization.

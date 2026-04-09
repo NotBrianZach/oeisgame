@@ -19,7 +19,7 @@ def cli_chooser(
         print(f"  [{idx}] {card.name} (cost {card.cost})")
 
     try:
-        raw = input("Choose card index (Enter to skip): ").strip()
+        raw = input("Choose card index (Enter for first affordable, if any): ").strip()
     except EOFError:
         raw = ""
 

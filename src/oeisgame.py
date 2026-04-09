@@ -11,12 +11,19 @@ CardChooser = Callable[[Sequence, "Enemy", int, List["Card"], int], Optional[int
 class Card:
     """A playable sequence operator card."""
 
-    def __init__(self, name: str, apply_fn: Callable[[Sequence], Sequence], cost: int = 1):
+    def __init__(
+        self,
+        name: str,
+        apply_fn: Callable[[Sequence], Sequence],
+        cost: int = 1,
+        exhaust_on_play: bool = False,
+    ):
         self.name = name
         self._apply_fn = apply_fn
         if cost < 0:
             raise ValueError("cost must be non-negative")
         self.cost = cost
+        self.exhaust_on_play = exhaust_on_play
 
     def apply(self, seq: Sequence) -> Sequence:
         if not seq:
@@ -24,7 +31,10 @@ class Card:
         return self._apply_fn(list(seq))
 
     def __repr__(self) -> str:
-        return f"Card({self.name}, cost={self.cost})"
+        return (
+            f"Card({self.name}, cost={self.cost}, "
+            f"exhaust_on_play={self.exhaust_on_play})"
+        )
 
 
 @dataclass
@@ -46,7 +56,7 @@ class CombatDeckState:
 @dataclass
 class TurnResult:
     turn: int
-    card_name: str
+    card_names: List[str]
     sequence: Sequence
     passed_constraint: bool
     damage_dealt: int
@@ -132,7 +142,7 @@ def starter_deck() -> List[Card]:
         Card("Double", _double_all, cost=2),
         Card("Append Sum", _append_sum, cost=2),
         Card("Duplicate Last", _duplicate_last, cost=1),
-        Card("Fibonacci Kernel", _fibonacci_kernel, cost=2),
+        Card("Fibonacci Kernel", _fibonacci_kernel, cost=2, exhaust_on_play=True),
         Card("Difference", _difference, cost=1),
     ]
 
@@ -203,28 +213,31 @@ def play_card(
     deck_state: CombatDeckState,
     energy: int,
     chooser: Optional[CardChooser],
-) -> tuple[Sequence, int, str, int, str]:
+) -> tuple[Sequence, int, Optional[Card], int, str]:
     hand = deck_state.hand
     if not hand:
-        return sequence, energy, "Skip", 0, "No cards in hand"
+        return sequence, energy, None, 0, "No cards in hand"
 
     choose_fn = chooser or _default_chooser
     selected = choose_fn(list(sequence), enemy, turn, list(hand), energy)
     if selected is None:
-        return sequence, energy, "Skip", 0, "No card selected"
+        return sequence, energy, None, 0, "No card selected"
     if selected < 0 or selected >= len(hand):
-        return sequence, energy, "Skip", 0, f"Invalid selection index {selected}"
+        return sequence, energy, None, 0, f"Invalid selection index {selected}"
 
     card = hand[selected]
     if card.cost > energy:
-        return sequence, energy, "Skip", 0, f"Insufficient energy for {card.name}"
+        return sequence, energy, None, 0, f"Insufficient energy for {card.name}"
 
     hand.pop(selected)
     new_sequence = card.apply(sequence)
     remaining_energy = energy - card.cost
-    deck_state.discard_pile.append(card)
+    if card.exhaust_on_play:
+        deck_state.exhaust_pile.append(card)
+    else:
+        deck_state.discard_pile.append(card)
     damage = max(1, enemy.score(new_sequence))
-    return new_sequence, remaining_energy, card.name, damage, ""
+    return new_sequence, remaining_energy, card, damage, ""
 
 
 def resolve_end_turn(deck_state: CombatDeckState) -> None:
@@ -254,17 +267,33 @@ def play_battle(
         turn = idx + 1
         hand_names = start_turn(deck_state, hand_size=hand_size)
         energy = energy_per_turn
+        cards_played: List[str] = []
+        turn_notes: List[str] = []
+        total_damage = 0
 
-        sequence, energy_after, card_name, damage, note = play_card(
-            sequence=sequence,
-            enemy=enemy,
-            turn=turn,
-            deck_state=deck_state,
-            energy=energy,
-            chooser=chooser,
-        )
+        while True:
+            sequence, next_energy, card, damage, note = play_card(
+                sequence=sequence,
+                enemy=enemy,
+                turn=turn,
+                deck_state=deck_state,
+                energy=energy,
+                chooser=chooser,
+            )
+            energy = next_energy
+            total_damage += damage
 
-        enemy_hp -= damage
+            if card is None:
+                if note:
+                    turn_notes.append(note)
+                break
+
+            cards_played.append(card.name)
+
+            if energy <= 0 or not deck_state.hand:
+                break
+
+        enemy_hp -= total_damage
         passed = enemy.constraint(sequence)
         if not passed:
             player_hp -= 2
@@ -272,14 +301,14 @@ def play_battle(
         history.append(
             TurnResult(
                 turn=turn,
-                card_name=card_name,
+                card_names=cards_played if cards_played else ["Skip"],
                 sequence=list(sequence),
                 passed_constraint=passed,
-                damage_dealt=damage,
-                energy_before=energy,
-                energy_after=energy_after,
+                damage_dealt=total_damage,
+                energy_before=energy_per_turn,
+                energy_after=energy,
                 hand_before=hand_names,
-                note=note,
+                note=" | ".join(turn_notes),
             )
         )
 
@@ -303,7 +332,8 @@ def format_battle_log(state: GameState, enemy: Enemy) -> str:
         constraint = "PASS" if turn.passed_constraint else "FAIL"
         lines.append(
             f"Turn {turn.turn}: hand={turn.hand_before} | energy={turn.energy_before}->{turn.energy_after} | "
-            f"played={turn.card_name:16} | seq={turn.sequence} | constraint={constraint} | damage={turn.damage_dealt}"
+            f"played={','.join(turn.card_names):16} | seq={turn.sequence} | "
+            f"constraint={constraint} | damage={turn.damage_dealt}"
         )
         if turn.note:
             lines.append(f"  note: {turn.note}")
