@@ -1,10 +1,13 @@
 from src.oeisgame import (
+    Card,
     has_three_primes_in_first_six,
+    initialize_combat_deck,
     no_repeats,
     play_battle,
     prime_score,
     starter_deck,
     starter_enemies,
+    start_turn,
 )
 
 
@@ -33,3 +36,44 @@ def test_battle_produces_history():
 
     assert len(state.history) >= 1
     assert len(state.sequence) >= 1
+
+
+def test_reshuffle_moves_discard_to_draw_pile():
+    deck = [Card("A", lambda s: s, cost=1), Card("B", lambda s: s, cost=1)]
+    deck_state = initialize_combat_deck(deck)
+
+    first_hand = start_turn(deck_state, hand_size=2)
+    assert first_hand == ["A", "B"]
+
+    deck_state.discard_pile.extend(deck_state.hand)
+    deck_state.hand.clear()
+
+    second_hand = start_turn(deck_state, hand_size=2)
+    assert second_hand == ["A", "B"]
+
+
+def test_energy_prevents_expensive_card_play():
+    enemy = starter_enemies()[0]
+
+    def chooser(_seq, _enemy, _turn, _hand, _energy):
+        return 0
+
+    deck = [Card("Too Expensive", lambda s: s + [99], cost=5)]
+    state = play_battle(deck=deck, enemy=enemy, turns=1, energy_per_turn=1, chooser=chooser)
+
+    turn = state.history[0]
+    assert turn.card_name == "Skip"
+    assert turn.note.startswith("Insufficient energy")
+
+
+def test_invalid_selection_is_guarded():
+    enemy = starter_enemies()[0]
+
+    def chooser(_seq, _enemy, _turn, _hand, _energy):
+        return 99
+
+    state = play_battle(deck=starter_deck(), enemy=enemy, turns=1, chooser=chooser)
+
+    turn = state.history[0]
+    assert turn.card_name == "Skip"
+    assert turn.note.startswith("Invalid selection index")
