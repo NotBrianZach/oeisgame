@@ -37,6 +37,11 @@ python3 -m pytest -q
   - Prime Oracle (prime-density constraint)
   - Entropy Warden (anti-repeat constraint)
 
+
+## Project roadmap
+
+See `ROADMAP.md` for milestone planning and an actionable sprint backlog.
+
 ## Next implementation steps
 
 1. Add hand/draw/discard mechanics (instead of deterministic card cycling).
