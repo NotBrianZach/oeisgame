@@ -1,11 +1,13 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+import random
 from typing import Callable, Iterable, List, Optional
 
 
 Sequence = List[int]
 CardChooser = Callable[[Sequence, "Enemy", int, List["Card"], int], Optional[int]]
+RewardChooser = Callable[["RunState", List["RewardOption"]], int]
 
 
 class Card:
@@ -34,6 +36,14 @@ class Card:
         return (
             f"Card({self.name}, cost={self.cost}, "
             f"exhaust_on_play={self.exhaust_on_play})"
+        )
+
+    def upgraded(self, suffix: str = "+") -> "Card":
+        return Card(
+            name=f"{self.name}{suffix}",
+            apply_fn=self._apply_fn,
+            cost=max(0, self.cost - 1),
+            exhaust_on_play=self.exhaust_on_play,
         )
 
 
@@ -95,6 +105,39 @@ class GameState:
     player_hp: int
     history: List[TurnResult]
     deck_state: CombatDeckState
+
+
+@dataclass
+class MapNode:
+    index: int
+    node_type: str
+    label: str
+    enemy: Optional[Enemy] = None
+
+
+@dataclass
+class RewardOption:
+    kind: str
+    description: str
+    apply_reward: Callable[["RunState"], None]
+
+
+@dataclass
+class RunState:
+    seed: int
+    deck: List[Card]
+    player_hp: int
+    max_hp: int
+    map_nodes: List[MapNode]
+    node_position: int = 0
+    battle_logs: List[str] | None = None
+    rewards_taken: List[str] | None = None
+
+    def __post_init__(self) -> None:
+        if self.battle_logs is None:
+            self.battle_logs = []
+        if self.rewards_taken is None:
+            self.rewards_taken = []
 
 
 def _append_sum(seq: Sequence) -> Sequence:
@@ -379,6 +422,39 @@ def starter_bosses() -> List[Enemy]:
             ],
         ),
     ]
+
+
+def generate_run_map(seed: int, nodes: int = 6) -> List[MapNode]:
+    if nodes < 5:
+        raise ValueError("nodes must be at least 5")
+    rng = random.Random(seed)
+    regular_enemies = starter_enemies()
+    bosses = starter_bosses()
+    encounter_types = ["combat", "combat", "event", "rest", "elite"]
+    generated: List[MapNode] = []
+    for i in range(nodes - 1):
+        node_type = encounter_types[i] if i < len(encounter_types) else rng.choice(
+            encounter_types
+        )
+        enemy = rng.choice(regular_enemies) if node_type in ("combat", "elite") else None
+        generated.append(
+            MapNode(
+                index=i + 1,
+                node_type=node_type,
+                label=f"Node {i + 1}: {node_type.title()}",
+                enemy=enemy,
+            )
+        )
+    boss = bosses[rng.randrange(len(bosses))]
+    generated.append(
+        MapNode(
+            index=nodes,
+            node_type="boss",
+            label=f"Node {nodes}: Boss - {boss.name}",
+            enemy=boss,
+        )
+    )
+    return generated
 
 
 def _phase_for_turn(enemy: Enemy, turn: int) -> tuple[Optional[BossPhase], int]:
@@ -690,3 +766,83 @@ def format_battle_log(state: GameState, enemy: Enemy) -> str:
     else:
         lines.append("Result: Inconclusive")
     return "\n".join(lines)
+
+
+def _create_reward_options(run_state: RunState, rng: random.Random) -> List[RewardOption]:
+    def _heal(rs: RunState) -> None:
+        rs.player_hp = min(rs.max_hp, rs.player_hp + 3)
+
+    def _upgrade(rs: RunState) -> None:
+        if not rs.deck:
+            return
+        target = rs.deck[0]
+        rs.deck[0] = target.upgraded()
+
+    def _new_card(rs: RunState) -> None:
+        candidates = [
+            Card("Boost Tail", _boost_latest, cost=1),
+            Card("Prime Shift", _prime_shift, cost=1),
+            Card("Tail Shear", _truncate_tail, cost=1),
+        ]
+        rs.deck.append(candidates[rng.randrange(len(candidates))])
+
+    return [
+        RewardOption(kind="heal", description="Recover 3 HP", apply_reward=_heal),
+        RewardOption(
+            kind="upgrade",
+            description="Upgrade first card in deck (-1 cost)",
+            apply_reward=_upgrade,
+        ),
+        RewardOption(kind="card", description="Add a utility card", apply_reward=_new_card),
+    ]
+
+
+def run_single_session(
+    seed: int,
+    nodes: int = 6,
+    chooser: Optional[CardChooser] = None,
+    reward_chooser: Optional[RewardChooser] = None,
+) -> RunState:
+    rng = random.Random(seed)
+    run_state = RunState(
+        seed=seed,
+        deck=starter_deck(),
+        player_hp=25,
+        max_hp=25,
+        map_nodes=generate_run_map(seed=seed, nodes=nodes),
+    )
+    for node in run_state.map_nodes:
+        run_state.node_position = node.index
+        if node.node_type in ("event",):
+            run_state.player_hp = min(run_state.max_hp, run_state.player_hp + 1)
+            run_state.battle_logs.append(f"{node.label}: quiet archive event (+1 HP).")
+            continue
+        if node.node_type in ("rest",):
+            run_state.player_hp = min(run_state.max_hp, run_state.player_hp + 5)
+            run_state.battle_logs.append(f"{node.label}: rested (+5 HP).")
+            continue
+        if node.enemy is None:
+            continue
+
+        battle = play_battle(
+            deck=run_state.deck,
+            enemy=node.enemy,
+            chooser=chooser,
+            player_hp=run_state.player_hp,
+            enemy_hp=45 if node.node_type == "boss" else 30,
+            turns=8 if node.node_type == "boss" else 6,
+        )
+        run_state.player_hp = battle.player_hp
+        run_state.battle_logs.append(format_battle_log(battle, node.enemy))
+        if run_state.player_hp <= 0:
+            break
+
+        if node.node_type in ("combat", "elite"):
+            options = _create_reward_options(run_state, rng)
+            pick = 0 if reward_chooser is None else reward_chooser(run_state, options)
+            pick = max(0, min(len(options) - 1, pick))
+            chosen = options[pick]
+            chosen.apply_reward(run_state)
+            run_state.rewards_taken.append(chosen.description)
+
+    return run_state
