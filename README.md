@@ -13,7 +13,9 @@ This repository now includes a minimal combat loop with:
 - Multi-card turns while energy remains.
 - Card exhaust behavior for one-shot effects.
 - Enemy intent anti-cards with one-turn telegraphing.
+- Multi-phase boss encounters with phase-specific intent cycles.
 - A few enemies with constraints + scoring functions.
+- Two starter bosses with escalating phase pressure.
 - Turn-by-turn battle logging.
 
 ## Project layout
@@ -43,6 +45,9 @@ python3 -m pytest -q
   - Exponential Beast (growth-focused)
   - Prime Oracle (prime-density constraint)
   - Entropy Warden (anti-repeat constraint)
+- **Bosses**:
+  - Cathedral of Ratios (growth + uniqueness pressure across phases)
+  - Prime Archivist (prime-structure pressure with corruption waves)
 
 ## Project roadmap
 

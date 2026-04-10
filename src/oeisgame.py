@@ -44,11 +44,22 @@ class Enemy:
     constraint: Callable[[Sequence], bool]
     score: Callable[[Sequence], int]
     intent_cycle: Optional[List["EnemyIntent"]] = None
+    phases: Optional[List["BossPhase"]] = None
+    is_boss: bool = False
+
+
+@dataclass
+class BossPhase:
+    name: str
+    turns: int
+    intent_cycle: List["EnemyIntent"]
+    player_penalty_on_fail: int = 2
 
 
 @dataclass
 class EnemyIntent:
     name: str
+    kind: str
     description: str
     apply_effect: Callable[[Sequence], Sequence]
 
@@ -73,6 +84,7 @@ class TurnResult:
     hand_before: List[str]
     enemy_intent: Optional[str] = None
     telegraphed_intent: Optional[str] = None
+    enemy_phase: Optional[str] = None
     note: str = ""
 
 
@@ -133,6 +145,22 @@ def _inject_noise(seq: Sequence) -> Sequence:
     return list(seq) + [seq[-1] - 1]
 
 
+def _boost_latest(seq: Sequence) -> Sequence:
+    if not seq:
+        return [1]
+    boosted = list(seq)
+    boosted[-1] += 2
+    return boosted
+
+
+def _prime_shift(seq: Sequence) -> Sequence:
+    if not seq:
+        return [2]
+    shifted = list(seq)
+    shifted[-1] = max(2, shifted[-1] + 1)
+    return shifted
+
+
 def _is_prime(n: int) -> bool:
     if n < 2:
         return False
@@ -187,13 +215,21 @@ def starter_enemies() -> List[Enemy]:
             intent_cycle=[
                 EnemyIntent(
                     name="Growth Suppressor",
+                    kind="debuff",
                     description="Flattens the sequence to its first value.",
                     apply_effect=_flatten_growth,
                 ),
                 EnemyIntent(
                     name="Tail Shear",
+                    kind="disrupt",
                     description="Removes the most recent term from the sequence.",
                     apply_effect=_truncate_tail,
+                ),
+                EnemyIntent(
+                    name="Predator Momentum",
+                    kind="scale",
+                    description="Boosts the latest term, raising future score pressure.",
+                    apply_effect=_boost_latest,
                 ),
             ],
         ),
@@ -205,13 +241,15 @@ def starter_enemies() -> List[Enemy]:
             intent_cycle=[
                 EnemyIntent(
                     name="Signal Noise",
+                    kind="disrupt",
                     description="Injects a noisy trailing value.",
                     apply_effect=_inject_noise,
                 ),
                 EnemyIntent(
-                    name="Tail Shear",
-                    description="Removes the most recent term from the sequence.",
-                    apply_effect=_truncate_tail,
+                    name="Prime Pulse",
+                    kind="buff",
+                    description="Shifts the trailing value toward prime territory.",
+                    apply_effect=_prime_shift,
                 ),
             ],
         ),
@@ -223,24 +261,147 @@ def starter_enemies() -> List[Enemy]:
             intent_cycle=[
                 EnemyIntent(
                     name="Signal Noise",
+                    kind="disrupt",
                     description="Injects a noisy trailing value.",
                     apply_effect=_inject_noise,
                 ),
                 EnemyIntent(
                     name="Growth Suppressor",
+                    kind="debuff",
                     description="Flattens the sequence to its first value.",
                     apply_effect=_flatten_growth,
+                ),
+                EnemyIntent(
+                    name="Entropy Spike",
+                    kind="scale",
+                    description="Boosts the latest term to accelerate divergence pressure.",
+                    apply_effect=_boost_latest,
                 ),
             ],
         ),
     ]
 
 
+def starter_bosses() -> List[Enemy]:
+    return [
+        Enemy(
+            name="Cathedral of Ratios",
+            description="Boss: Survive layered suppression while maintaining growth and variety.",
+            constraint=lambda s: growth_score(s) >= 14 and no_repeats(s),
+            score=lambda s: growth_score(s) + len(set(s[:8])),
+            is_boss=True,
+            phases=[
+                BossPhase(
+                    name="Sanctum Gate",
+                    turns=2,
+                    intent_cycle=[
+                        EnemyIntent(
+                            name="Choir of Noise",
+                            kind="disrupt",
+                            description="Injects a distorted trailing term.",
+                            apply_effect=_inject_noise,
+                        ),
+                        EnemyIntent(
+                            name="Pillar Shear",
+                            kind="disrupt",
+                            description="Removes the latest term.",
+                            apply_effect=_truncate_tail,
+                        ),
+                    ],
+                    player_penalty_on_fail=2,
+                ),
+                BossPhase(
+                    name="Ratio Sermon",
+                    turns=2,
+                    intent_cycle=[
+                        EnemyIntent(
+                            name="Suppressive Litany",
+                            kind="debuff",
+                            description="Flattens sequence progress.",
+                            apply_effect=_flatten_growth,
+                        ),
+                        EnemyIntent(
+                            name="Escalation Canticle",
+                            kind="scale",
+                            description="Empowers trailing growth pressure.",
+                            apply_effect=_boost_latest,
+                        ),
+                    ],
+                    player_penalty_on_fail=3,
+                ),
+            ],
+        ),
+        Enemy(
+            name="Prime Archivist",
+            description="Boss: Preserve prime-rich structure through alternating corruption waves.",
+            constraint=lambda s: has_three_primes_in_first_six(s) and len(s) >= 5,
+            score=lambda s: prime_score(s) + max(0, len(s) - 4),
+            is_boss=True,
+            phases=[
+                BossPhase(
+                    name="Catalog Bloom",
+                    turns=2,
+                    intent_cycle=[
+                        EnemyIntent(
+                            name="Archive Pulse",
+                            kind="buff",
+                            description="Shifts trailing value into a stronger prime corridor.",
+                            apply_effect=_prime_shift,
+                        ),
+                        EnemyIntent(
+                            name="Margin Noise",
+                            kind="disrupt",
+                            description="Appends a noisy trailing value.",
+                            apply_effect=_inject_noise,
+                        ),
+                    ],
+                    player_penalty_on_fail=2,
+                ),
+                BossPhase(
+                    name="Index Collapse",
+                    turns=2,
+                    intent_cycle=[
+                        EnemyIntent(
+                            name="Page Redaction",
+                            kind="disrupt",
+                            description="Removes the latest sequence term.",
+                            apply_effect=_truncate_tail,
+                        ),
+                        EnemyIntent(
+                            name="Archivist Pressure",
+                            kind="scale",
+                            description="Amplifies trailing value to stress prime planning.",
+                            apply_effect=_boost_latest,
+                        ),
+                    ],
+                    player_penalty_on_fail=3,
+                ),
+            ],
+        ),
+    ]
+
+
+def _phase_for_turn(enemy: Enemy, turn: int) -> tuple[Optional[BossPhase], int]:
+    if not enemy.phases:
+        return None, turn
+    elapsed = 0
+    for phase in enemy.phases:
+        elapsed += phase.turns
+        if turn <= elapsed:
+            phase_local_turn = turn - (elapsed - phase.turns)
+            return phase, phase_local_turn
+    last = enemy.phases[-1]
+    overflow_turn = max(1, turn - (elapsed - last.turns))
+    return last, overflow_turn
+
+
 def _intent_for_turn(enemy: Enemy, turn: int) -> Optional[EnemyIntent]:
-    if not enemy.intent_cycle:
+    phase, phase_turn = _phase_for_turn(enemy, turn)
+    cycle = phase.intent_cycle if phase is not None else enemy.intent_cycle
+    if not cycle:
         return None
-    idx = (turn - 1) % len(enemy.intent_cycle)
-    return enemy.intent_cycle[idx]
+    idx = (phase_turn - 1) % len(cycle)
+    return cycle[idx]
 
 
 def initialize_combat_deck(deck: Iterable[Card]) -> CombatDeckState:
@@ -430,6 +591,7 @@ def play_battle(
         cards_played: List[str] = []
         turn_notes: List[str] = []
         total_damage = 0
+        current_phase, _ = _phase_for_turn(enemy, turn)
         current_intent = _intent_for_turn(enemy, turn)
         next_intent = _intent_for_turn(enemy, turn + 1)
 
@@ -458,10 +620,16 @@ def play_battle(
         enemy_hp -= total_damage
         if current_intent is not None:
             sequence = current_intent.apply_effect(sequence)
-            turn_notes.append(f"Enemy intent {current_intent.name}: {current_intent.description}")
+            turn_notes.append(
+                f"Enemy intent {current_intent.name} [{current_intent.kind}]: "
+                f"{current_intent.description}"
+            )
         passed = enemy.constraint(sequence)
         if not passed:
-            player_hp -= 2
+            if current_phase is not None:
+                player_hp -= current_phase.player_penalty_on_fail
+            else:
+                player_hp -= 2
 
         history.append(
             TurnResult(
@@ -475,6 +643,7 @@ def play_battle(
                 hand_before=hand_names,
                 enemy_intent=current_intent.name if current_intent else None,
                 telegraphed_intent=next_intent.name if next_intent else None,
+                enemy_phase=current_phase.name if current_phase else None,
                 note=" | ".join(turn_notes),
             )
         )
@@ -501,6 +670,7 @@ def format_battle_log(state: GameState, enemy: Enemy) -> str:
             f"Turn {turn.turn}: hand={turn.hand_before} | energy={turn.energy_before}->{turn.energy_after} | "
             f"played={','.join(turn.card_names):16} | seq={turn.sequence} | "
             f"constraint={constraint} | damage={turn.damage_dealt} | "
+            f"phase={turn.enemy_phase or 'Base'} | "
             f"intent={turn.enemy_intent or 'None'} -> next={turn.telegraphed_intent or 'None'}"
         )
         if turn.note:

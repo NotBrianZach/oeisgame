@@ -9,6 +9,7 @@ from oeisgame import (
     format_battle_log,
     play_battle,
     recommend_card_by_rollout,
+    starter_bosses,
     starter_deck,
     starter_enemies,
 )
@@ -56,6 +57,10 @@ def main() -> None:
         state = play_battle(deck=deck, enemy=enemy, chooser=cli_chooser)
         print(format_battle_log(state, enemy))
         print("-" * 80)
+    for boss in starter_bosses():
+        state = play_battle(deck=deck, enemy=boss, chooser=cli_chooser, enemy_hp=45, turns=8)
+        print(format_battle_log(state, boss))
+        print("=" * 80)
 
 
 if __name__ == "__main__":
