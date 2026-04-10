@@ -11,6 +11,7 @@ from oeisgame import (
     format_battle_log,
     play_battle,
     recommend_card_by_rollout,
+    run_summary,
     run_single_session,
     starter_bosses,
     starter_deck,
@@ -85,6 +86,7 @@ def main() -> None:
     for reward in state.rewards_taken:
         print(f"- {reward}")
     print(f"Final HP: {state.player_hp}/{state.max_hp}")
+    print(run_summary(state))
 
 
 if __name__ == "__main__":

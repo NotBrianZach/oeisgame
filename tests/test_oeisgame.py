@@ -1,4 +1,6 @@
 from src.oeisgame import (
+    battle_timeline,
+    card_library,
     Card,
     Enemy,
     EnemyIntent,
@@ -10,6 +12,7 @@ from src.oeisgame import (
     prime_score,
     recommend_card_by_rollout,
     run_single_session,
+    run_summary,
     starter_bosses,
     starter_deck,
     starter_enemies,
@@ -267,3 +270,28 @@ def test_run_reward_upgrade_reduces_cost():
     state = run_single_session(seed=2, nodes=5, reward_chooser=pick_upgrade)
     upgraded_cards = [card for card in state.deck if card.name.endswith("+")]
     assert len(upgraded_cards) >= 1
+
+
+def test_card_library_has_30_plus_cards_and_rarity_tags():
+    cards = card_library()
+    assert len(cards) >= 30
+    assert {card.rarity for card in cards} == {"common", "uncommon", "rare"}
+
+
+def test_enemy_pool_supports_normal_elite_and_boss_generation():
+    generated = generate_run_map(seed=42, nodes=8)
+    pools = [n.enemy.encounter_pool for n in generated if n.enemy is not None]
+    assert "normal" in pools
+    assert "elite" in pools
+    assert pools[-1] == "boss"
+
+
+def test_run_summary_and_timeline_are_available_for_cli_and_web_views():
+    state = run_single_session(seed=7, nodes=6)
+    summary = run_summary(state)
+    assert "Run seed=7" in summary
+
+    battle = play_battle(deck=starter_deck(), enemy=starter_enemies()[0], turns=2)
+    timeline = battle_timeline(battle)
+    assert len(timeline) == len(battle.history)
+    assert "sequence" in timeline[0]
