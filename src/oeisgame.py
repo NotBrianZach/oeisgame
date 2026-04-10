@@ -43,6 +43,14 @@ class Enemy:
     description: str
     constraint: Callable[[Sequence], bool]
     score: Callable[[Sequence], int]
+    intent_cycle: Optional[List["EnemyIntent"]] = None
+
+
+@dataclass
+class EnemyIntent:
+    name: str
+    description: str
+    apply_effect: Callable[[Sequence], Sequence]
 
 
 @dataclass
@@ -63,6 +71,8 @@ class TurnResult:
     energy_before: int
     energy_after: int
     hand_before: List[str]
+    enemy_intent: Optional[str] = None
+    telegraphed_intent: Optional[str] = None
     note: str = ""
 
 
@@ -101,6 +111,26 @@ def _difference(seq: Sequence) -> Sequence:
     if len(seq) < 2:
         return seq
     return [b - a for a, b in zip(seq, seq[1:])]
+
+
+def _truncate_tail(seq: Sequence) -> Sequence:
+    if len(seq) <= 1:
+        return list(seq)
+    keep = max(1, len(seq) - 1)
+    return list(seq[:keep])
+
+
+def _flatten_growth(seq: Sequence) -> Sequence:
+    if not seq:
+        return [0]
+    baseline = seq[0]
+    return [baseline for _ in seq]
+
+
+def _inject_noise(seq: Sequence) -> Sequence:
+    if not seq:
+        return [0]
+    return list(seq) + [seq[-1] - 1]
 
 
 def _is_prime(n: int) -> bool:
@@ -154,20 +184,63 @@ def starter_enemies() -> List[Enemy]:
             description="Maintain strong growth by turn 6.",
             constraint=lambda s: growth_score(s) >= 10,
             score=lambda s: growth_score(s) // 2,
+            intent_cycle=[
+                EnemyIntent(
+                    name="Growth Suppressor",
+                    description="Flattens the sequence to its first value.",
+                    apply_effect=_flatten_growth,
+                ),
+                EnemyIntent(
+                    name="Tail Shear",
+                    description="Removes the most recent term from the sequence.",
+                    apply_effect=_truncate_tail,
+                ),
+            ],
         ),
         Enemy(
             name="Prime Oracle",
             description="At least 3 primes in first 6 terms.",
             constraint=has_three_primes_in_first_six,
             score=prime_score,
+            intent_cycle=[
+                EnemyIntent(
+                    name="Signal Noise",
+                    description="Injects a noisy trailing value.",
+                    apply_effect=_inject_noise,
+                ),
+                EnemyIntent(
+                    name="Tail Shear",
+                    description="Removes the most recent term from the sequence.",
+                    apply_effect=_truncate_tail,
+                ),
+            ],
         ),
         Enemy(
             name="Entropy Warden",
             description="Avoid repeated values.",
             constraint=no_repeats,
             score=lambda s: len(set(s)),
+            intent_cycle=[
+                EnemyIntent(
+                    name="Signal Noise",
+                    description="Injects a noisy trailing value.",
+                    apply_effect=_inject_noise,
+                ),
+                EnemyIntent(
+                    name="Growth Suppressor",
+                    description="Flattens the sequence to its first value.",
+                    apply_effect=_flatten_growth,
+                ),
+            ],
         ),
     ]
+
+
+def _intent_for_turn(enemy: Enemy, turn: int) -> Optional[EnemyIntent]:
+    if not enemy.intent_cycle:
+        return None
+    idx = (turn - 1) % len(enemy.intent_cycle)
+    return enemy.intent_cycle[idx]
 
 
 def initialize_combat_deck(deck: Iterable[Card]) -> CombatDeckState:
@@ -357,6 +430,8 @@ def play_battle(
         cards_played: List[str] = []
         turn_notes: List[str] = []
         total_damage = 0
+        current_intent = _intent_for_turn(enemy, turn)
+        next_intent = _intent_for_turn(enemy, turn + 1)
 
         while True:
             sequence, next_energy, card, damage, note = play_card(
@@ -381,6 +456,9 @@ def play_battle(
                 break
 
         enemy_hp -= total_damage
+        if current_intent is not None:
+            sequence = current_intent.apply_effect(sequence)
+            turn_notes.append(f"Enemy intent {current_intent.name}: {current_intent.description}")
         passed = enemy.constraint(sequence)
         if not passed:
             player_hp -= 2
@@ -395,6 +473,8 @@ def play_battle(
                 energy_before=energy_per_turn,
                 energy_after=energy,
                 hand_before=hand_names,
+                enemy_intent=current_intent.name if current_intent else None,
+                telegraphed_intent=next_intent.name if next_intent else None,
                 note=" | ".join(turn_notes),
             )
         )
@@ -420,7 +500,8 @@ def format_battle_log(state: GameState, enemy: Enemy) -> str:
         lines.append(
             f"Turn {turn.turn}: hand={turn.hand_before} | energy={turn.energy_before}->{turn.energy_after} | "
             f"played={','.join(turn.card_names):16} | seq={turn.sequence} | "
-            f"constraint={constraint} | damage={turn.damage_dealt}"
+            f"constraint={constraint} | damage={turn.damage_dealt} | "
+            f"intent={turn.enemy_intent or 'None'} -> next={turn.telegraphed_intent or 'None'}"
         )
         if turn.note:
             lines.append(f"  note: {turn.note}")

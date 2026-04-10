@@ -12,6 +12,7 @@ This repository now includes a minimal combat loop with:
 - Per-turn energy and card costs.
 - Multi-card turns while energy remains.
 - Card exhaust behavior for one-shot effects.
+- Enemy intent anti-cards with one-turn telegraphing.
 - A few enemies with constraints + scoring functions.
 - Turn-by-turn battle logging.
 
@@ -49,6 +50,6 @@ See `ROADMAP.md` for milestone planning and an actionable sprint backlog.
 
 ## Next implementation steps
 
-1. Add enemy “anti-cards” that disrupt sequence state.
+1. Expand enemy intents with buffs/debuff variants and per-enemy intent tables.
 2. Add map nodes + run progression.
 3. Build a basic web UI for sequence visualization.
