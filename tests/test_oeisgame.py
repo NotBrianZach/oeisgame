@@ -5,6 +5,7 @@ from src.oeisgame import (
     no_repeats,
     play_battle,
     prime_score,
+    recommend_card_by_rollout,
     starter_deck,
     starter_enemies,
     start_turn,
@@ -110,3 +111,37 @@ def test_exhaust_card_moves_to_exhaust_pile():
     assert len(state.deck_state.exhaust_pile) == 1
     assert state.deck_state.exhaust_pile[0].name == "One Shot"
     assert state.deck_state.discard_pile == []
+
+
+def test_rollout_recommends_affordable_high_value_card():
+    enemy = starter_enemies()[0]
+    hand = [
+        Card("Cheap Small", lambda s: s + [2], cost=1),
+        Card("Big Growth", lambda s: s + [20], cost=2),
+    ]
+
+    selected = recommend_card_by_rollout(
+        sequence=[2],
+        enemy=enemy,
+        turn=1,
+        hand=hand,
+        energy=2,
+        rollout_steps=2,
+    )
+
+    assert selected == 1
+
+
+def test_rollout_returns_none_when_no_affordable_card():
+    enemy = starter_enemies()[0]
+    hand = [Card("Too Expensive", lambda s: s + [5], cost=4)]
+
+    selected = recommend_card_by_rollout(
+        sequence=[1],
+        enemy=enemy,
+        turn=1,
+        hand=hand,
+        energy=1,
+    )
+
+    assert selected is None

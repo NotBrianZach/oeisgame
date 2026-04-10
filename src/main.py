@@ -2,7 +2,16 @@ from __future__ import annotations
 
 from typing import List, Optional
 
-from oeisgame import Card, Enemy, Sequence, format_battle_log, play_battle, starter_deck, starter_enemies
+from oeisgame import (
+    Card,
+    Enemy,
+    Sequence,
+    format_battle_log,
+    play_battle,
+    recommend_card_by_rollout,
+    starter_deck,
+    starter_enemies,
+)
 
 
 def cli_chooser(
@@ -12,22 +21,28 @@ def cli_chooser(
     hand: List[Card],
     energy: int,
 ) -> Optional[int]:
+    recommended = recommend_card_by_rollout(
+        sequence=sequence,
+        enemy=enemy,
+        turn=turn,
+        hand=hand,
+        energy=energy,
+        rollout_steps=3,
+    )
     print(f"\nTurn {turn} vs {enemy.name}")
     print(f"Current sequence: {sequence}")
     print(f"Energy: {energy}")
     for idx, card in enumerate(hand):
-        print(f"  [{idx}] {card.name} (cost {card.cost})")
+        marker = " <= rollout pick" if recommended == idx else ""
+        print(f"  [{idx}] {card.name} (cost {card.cost}){marker}")
 
     try:
-        raw = input("Choose card index (Enter for first affordable, if any): ").strip()
+        raw = input("Choose card index (Enter for rollout recommendation): ").strip()
     except EOFError:
         raw = ""
 
     if raw == "":
-        for idx, card in enumerate(hand):
-            if card.cost <= energy:
-                return idx
-        return None
+        return recommended
 
     try:
         return int(raw)
