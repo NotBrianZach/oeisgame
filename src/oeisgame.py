@@ -240,6 +240,93 @@ def play_card(
     return new_sequence, remaining_energy, card, damage, ""
 
 
+def recommend_card_by_rollout(
+    sequence: Sequence,
+    enemy: Enemy,
+    turn: int,
+    hand: List[Card],
+    energy: int,
+    rollout_steps: int = 2,
+    draw_pile: Optional[List[Card]] = None,
+    discard_pile: Optional[List[Card]] = None,
+    exhaust_pile: Optional[List[Card]] = None,
+) -> Optional[int]:
+    """Pick a hand index by simulating short deterministic rollouts.
+
+    The rollout simulates:
+    - playing a candidate card now,
+    - then taking default affordable plays for a small number of subsequent actions.
+    """
+    if rollout_steps < 1:
+        raise ValueError("rollout_steps must be at least 1")
+    if not hand:
+        return None
+
+    best_idx: Optional[int] = None
+    best_value: Optional[tuple[int, int, int]] = None
+
+    for idx, candidate in enumerate(hand):
+        if candidate.cost > energy:
+            continue
+
+        sim_sequence = list(sequence)
+        sim_draw = list(draw_pile or [])
+        sim_hand = list(hand)
+        sim_discard = list(discard_pile or [])
+        sim_exhaust = list(exhaust_pile or [])
+        sim_energy = energy
+        sim_damage = 0
+        sim_actions = 0
+
+        while sim_actions < rollout_steps:
+            if not sim_hand:
+                break
+
+            selected_idx = idx if sim_actions == 0 else _default_chooser(
+                sim_sequence,
+                enemy,
+                turn,
+                sim_hand,
+                sim_energy,
+            )
+            if selected_idx is None:
+                break
+
+            card = sim_hand[selected_idx]
+            if card.cost > sim_energy:
+                break
+
+            sim_hand.pop(selected_idx)
+            sim_sequence = card.apply(sim_sequence)
+            sim_energy -= card.cost
+            sim_damage += max(1, enemy.score(sim_sequence))
+            if card.exhaust_on_play:
+                sim_exhaust.append(card)
+            else:
+                sim_discard.append(card)
+
+            if sim_energy <= 0:
+                break
+
+            if not sim_hand and sim_draw:
+                sim_hand.append(sim_draw.pop(0))
+            elif not sim_hand and sim_discard:
+                sim_draw = list(sim_discard)
+                sim_discard.clear()
+                if sim_draw:
+                    sim_hand.append(sim_draw.pop(0))
+
+            sim_actions += 1
+
+        passes_constraint = 1 if enemy.constraint(sim_sequence) else 0
+        value = (sim_damage, passes_constraint, len(sim_sequence))
+        if best_value is None or value > best_value:
+            best_value = value
+            best_idx = idx
+
+    return best_idx
+
+
 def resolve_end_turn(deck_state: CombatDeckState) -> None:
     deck_state.discard_pile.extend(deck_state.hand)
     deck_state.hand.clear()

@@ -27,7 +27,7 @@ This repository now includes a minimal combat loop with:
 python3 src/main.py
 ```
 
-Tip: pressing Enter on the prompt uses deterministic fallback (first affordable card), which is useful for quick non-interactive runs.
+Tip: pressing Enter on the prompt now uses a short rollout recommendation (3-step lookahead) to pick a card automatically.
 
 ## Run tests
 
