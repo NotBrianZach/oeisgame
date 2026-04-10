@@ -19,6 +19,7 @@ class Card:
         apply_fn: Callable[[Sequence], Sequence],
         cost: int = 1,
         exhaust_on_play: bool = False,
+        rarity: str = "common",
     ):
         self.name = name
         self._apply_fn = apply_fn
@@ -26,6 +27,7 @@ class Card:
             raise ValueError("cost must be non-negative")
         self.cost = cost
         self.exhaust_on_play = exhaust_on_play
+        self.rarity = rarity
 
     def apply(self, seq: Sequence) -> Sequence:
         if not seq:
@@ -35,7 +37,7 @@ class Card:
     def __repr__(self) -> str:
         return (
             f"Card({self.name}, cost={self.cost}, "
-            f"exhaust_on_play={self.exhaust_on_play})"
+            f"exhaust_on_play={self.exhaust_on_play}, rarity={self.rarity})"
         )
 
     def upgraded(self, suffix: str = "+") -> "Card":
@@ -44,6 +46,7 @@ class Card:
             apply_fn=self._apply_fn,
             cost=max(0, self.cost - 1),
             exhaust_on_play=self.exhaust_on_play,
+            rarity=self.rarity,
         )
 
 
@@ -56,6 +59,7 @@ class Enemy:
     intent_cycle: Optional[List["EnemyIntent"]] = None
     phases: Optional[List["BossPhase"]] = None
     is_boss: bool = False
+    encounter_pool: str = "normal"
 
 
 @dataclass
@@ -132,6 +136,7 @@ class RunState:
     node_position: int = 0
     battle_logs: List[str] | None = None
     rewards_taken: List[str] | None = None
+    nodes_cleared: int = 0
 
     def __post_init__(self) -> None:
         if self.battle_logs is None:
@@ -166,6 +171,92 @@ def _difference(seq: Sequence) -> Sequence:
     if len(seq) < 2:
         return seq
     return [b - a for a, b in zip(seq, seq[1:])]
+
+
+def _append_product_tail(seq: Sequence) -> Sequence:
+    if len(seq) < 2:
+        return list(seq) + [seq[-1]]
+    return list(seq) + [seq[-1] * seq[-2]]
+
+
+def _reverse_sequence(seq: Sequence) -> Sequence:
+    return list(reversed(seq))
+
+
+def _keep_even_positions(seq: Sequence) -> Sequence:
+    filtered = [n for i, n in enumerate(seq) if i % 2 == 0]
+    return filtered if filtered else list(seq)
+
+
+def _keep_odd_positions(seq: Sequence) -> Sequence:
+    filtered = [n for i, n in enumerate(seq) if i % 2 == 1]
+    return filtered if filtered else list(seq)
+
+
+def _rotate_left(seq: Sequence) -> Sequence:
+    if len(seq) <= 1:
+        return list(seq)
+    return list(seq[1:]) + [seq[0]]
+
+
+def _square_tail(seq: Sequence) -> Sequence:
+    if not seq:
+        return [1]
+    updated = list(seq)
+    updated[-1] = updated[-1] * updated[-1]
+    return updated
+
+
+def _halve_tail(seq: Sequence) -> Sequence:
+    if not seq:
+        return [0]
+    updated = list(seq)
+    updated[-1] = updated[-1] // 2
+    return updated
+
+
+def _append_index(seq: Sequence) -> Sequence:
+    return list(seq) + [len(seq)]
+
+
+def _append_gap(seq: Sequence) -> Sequence:
+    if len(seq) < 2:
+        return list(seq) + [0]
+    return list(seq) + [seq[-1] - seq[-2]]
+
+
+def _mirror_tail(seq: Sequence) -> Sequence:
+    if len(seq) < 2:
+        return list(seq)
+    return list(seq) + [seq[-2]]
+
+
+def _triple_tail(seq: Sequence) -> Sequence:
+    if not seq:
+        return [0]
+    return list(seq) + [seq[-1] * 3]
+
+
+def _append_mod_three(seq: Sequence) -> Sequence:
+    return list(seq) + [sum(seq) % 3]
+
+
+def _running_max(seq: Sequence) -> Sequence:
+    out: List[int] = []
+    cur: Optional[int] = None
+    for n in seq:
+        cur = n if cur is None else max(cur, n)
+        out.append(cur)
+    return out
+
+
+def _running_min(seq: Sequence) -> Sequence:
+    out: List[int] = []
+    cur: Optional[int] = None
+    for n in seq:
+        cur = n if cur is None else min(cur, n)
+        out.append(cur)
+    return out
 
 
 def _truncate_tail(seq: Sequence) -> Sequence:
@@ -238,13 +329,44 @@ def no_repeats(seq: Sequence) -> bool:
 
 
 def starter_deck() -> List[Card]:
+    library = card_library()
+    return [library[0], library[1], library[2], library[3], library[4], library[5]]
+
+
+def card_library() -> List[Card]:
     return [
-        Card("Increment", _increment_all, cost=1),
-        Card("Double", _double_all, cost=2),
-        Card("Append Sum", _append_sum, cost=2),
-        Card("Duplicate Last", _duplicate_last, cost=1),
-        Card("Fibonacci Kernel", _fibonacci_kernel, cost=2, exhaust_on_play=True),
-        Card("Difference", _difference, cost=1),
+        Card("Increment", _increment_all, cost=1, rarity="common"),
+        Card("Double", _double_all, cost=2, rarity="common"),
+        Card("Append Sum", _append_sum, cost=2, rarity="common"),
+        Card("Duplicate Last", _duplicate_last, cost=1, rarity="common"),
+        Card("Fibonacci Kernel", _fibonacci_kernel, cost=2, exhaust_on_play=True, rarity="rare"),
+        Card("Difference", _difference, cost=1, rarity="common"),
+        Card("Product Tail", _append_product_tail, cost=2, rarity="uncommon"),
+        Card("Reverse", _reverse_sequence, cost=1, rarity="uncommon"),
+        Card("Keep Even Positions", _keep_even_positions, cost=1, rarity="common"),
+        Card("Keep Odd Positions", _keep_odd_positions, cost=1, rarity="common"),
+        Card("Rotate Left", _rotate_left, cost=1, rarity="common"),
+        Card("Square Tail", _square_tail, cost=2, rarity="uncommon"),
+        Card("Halve Tail", _halve_tail, cost=0, rarity="common"),
+        Card("Append Index", _append_index, cost=1, rarity="common"),
+        Card("Append Gap", _append_gap, cost=1, rarity="common"),
+        Card("Mirror Tail", _mirror_tail, cost=1, rarity="common"),
+        Card("Triple Tail", _triple_tail, cost=2, rarity="uncommon"),
+        Card("Mod-3 Echo", _append_mod_three, cost=1, rarity="common"),
+        Card("Running Max", _running_max, cost=2, rarity="uncommon"),
+        Card("Running Min", _running_min, cost=1, rarity="uncommon"),
+        Card("Prime Shift", _prime_shift, cost=1, rarity="uncommon"),
+        Card("Boost Tail", _boost_latest, cost=1, rarity="common"),
+        Card("Tail Shear", _truncate_tail, cost=1, rarity="common"),
+        Card("Noise Spike", _inject_noise, cost=1, rarity="common"),
+        Card("Flatten Curve", _flatten_growth, cost=2, rarity="rare"),
+        Card("Twin Sum", lambda s: list(s) + [sum(s[-2:]) if len(s) >= 2 else s[-1]], cost=2, rarity="uncommon"),
+        Card("Parity Pulse", lambda s: list(s) + [len([n for n in s if n % 2 == 0])], cost=1, rarity="uncommon"),
+        Card("Sign Flip", lambda s: [-n for n in s], cost=1, rarity="rare"),
+        Card("Head Anchor", lambda s: [s[0]] + s, cost=1, rarity="common"),
+        Card("Tail +2", lambda s: list(s) + [s[-1] + 2], cost=1, rarity="common"),
+        Card("Tail -1", lambda s: list(s) + [s[-1] - 1], cost=0, rarity="common"),
+        Card("Pairwise Sum", lambda s: [a + b for a, b in zip(s, s[1:])] or list(s), cost=2, rarity="rare"),
     ]
 
 
@@ -275,6 +397,7 @@ def starter_enemies() -> List[Enemy]:
                     apply_effect=_boost_latest,
                 ),
             ],
+            encounter_pool="normal",
         ),
         Enemy(
             name="Prime Oracle",
@@ -295,6 +418,7 @@ def starter_enemies() -> List[Enemy]:
                     apply_effect=_prime_shift,
                 ),
             ],
+            encounter_pool="normal",
         ),
         Enemy(
             name="Entropy Warden",
@@ -321,6 +445,70 @@ def starter_enemies() -> List[Enemy]:
                     apply_effect=_boost_latest,
                 ),
             ],
+            encounter_pool="elite",
+        ),
+        Enemy(
+            name="Recurrence Shade",
+            description="Keep sequence length high while weathering trims.",
+            constraint=lambda s: len(s) >= 5,
+            score=lambda s: len(s) * 2,
+            intent_cycle=[
+                EnemyIntent(
+                    name="Term Cull",
+                    kind="disrupt",
+                    description="Drops the most recent term.",
+                    apply_effect=_truncate_tail,
+                ),
+                EnemyIntent(
+                    name="Echo Gain",
+                    kind="buff",
+                    description="Duplicates the latest value.",
+                    apply_effect=_duplicate_last,
+                ),
+            ],
+            encounter_pool="normal",
+        ),
+        Enemy(
+            name="Modulus Siren",
+            description="Preserve variability in mod-3 residues.",
+            constraint=lambda s: len({n % 3 for n in s}) >= 2,
+            score=lambda s: len({n % 3 for n in s}) * 4,
+            intent_cycle=[
+                EnemyIntent(
+                    name="Residue Collapse",
+                    kind="debuff",
+                    description="Flattens values to reduce residue variety.",
+                    apply_effect=_flatten_growth,
+                ),
+                EnemyIntent(
+                    name="Residue Spark",
+                    kind="scale",
+                    description="Boosts tail to pressure residue planning.",
+                    apply_effect=_boost_latest,
+                ),
+            ],
+            encounter_pool="normal",
+        ),
+        Enemy(
+            name="Mirror Sentinel",
+            description="Maintain asymmetry while under reflection effects.",
+            constraint=lambda s: s != list(reversed(s)),
+            score=lambda s: len(s) + (3 if s != list(reversed(s)) else 0),
+            intent_cycle=[
+                EnemyIntent(
+                    name="Reflective Wave",
+                    kind="disrupt",
+                    description="Reverses the sequence order.",
+                    apply_effect=_reverse_sequence,
+                ),
+                EnemyIntent(
+                    name="Tail Spike",
+                    kind="scale",
+                    description="Adds momentum to latest term.",
+                    apply_effect=_boost_latest,
+                ),
+            ],
+            encounter_pool="elite",
         ),
     ]
 
@@ -373,6 +561,7 @@ def starter_bosses() -> List[Enemy]:
                     player_penalty_on_fail=3,
                 ),
             ],
+            encounter_pool="boss",
         ),
         Enemy(
             name="Prime Archivist",
@@ -420,6 +609,7 @@ def starter_bosses() -> List[Enemy]:
                     player_penalty_on_fail=3,
                 ),
             ],
+            encounter_pool="boss",
         ),
     ]
 
@@ -430,13 +620,20 @@ def generate_run_map(seed: int, nodes: int = 6) -> List[MapNode]:
     rng = random.Random(seed)
     regular_enemies = starter_enemies()
     bosses = starter_bosses()
-    encounter_types = ["combat", "combat", "event", "rest", "elite"]
+    encounter_types = ["combat", "combat", "event", "rest", "elite", "combat", "event"]
     generated: List[MapNode] = []
     for i in range(nodes - 1):
         node_type = encounter_types[i] if i < len(encounter_types) else rng.choice(
             encounter_types
         )
-        enemy = rng.choice(regular_enemies) if node_type in ("combat", "elite") else None
+        if node_type == "combat":
+            pool = [e for e in regular_enemies if e.encounter_pool == "normal"]
+            enemy = rng.choice(pool)
+        elif node_type == "elite":
+            pool = [e for e in regular_enemies if e.encounter_pool in ("elite", "normal")]
+            enemy = rng.choice(pool)
+        else:
+            enemy = None
         generated.append(
             MapNode(
                 index=i + 1,
@@ -779,11 +976,14 @@ def _create_reward_options(run_state: RunState, rng: random.Random) -> List[Rewa
         rs.deck[0] = target.upgraded()
 
     def _new_card(rs: RunState) -> None:
-        candidates = [
-            Card("Boost Tail", _boost_latest, cost=1),
-            Card("Prime Shift", _prime_shift, cost=1),
-            Card("Tail Shear", _truncate_tail, cost=1),
-        ]
+        rarity_roll = rng.random()
+        if rarity_roll < 0.65:
+            rarity = "common"
+        elif rarity_roll < 0.92:
+            rarity = "uncommon"
+        else:
+            rarity = "rare"
+        candidates = [card for card in card_library() if card.rarity == rarity]
         rs.deck.append(candidates[rng.randrange(len(candidates))])
 
     return [
@@ -844,5 +1044,31 @@ def run_single_session(
             chosen = options[pick]
             chosen.apply_reward(run_state)
             run_state.rewards_taken.append(chosen.description)
+            run_state.nodes_cleared += 1
 
     return run_state
+
+
+def run_summary(run_state: RunState) -> str:
+    return (
+        f"Run seed={run_state.seed} | node={run_state.node_position}/{len(run_state.map_nodes)} | "
+        f"hp={run_state.player_hp}/{run_state.max_hp} | combats_cleared={run_state.nodes_cleared} | "
+        f"deck_size={len(run_state.deck)} | rewards={len(run_state.rewards_taken or [])}"
+    )
+
+
+def battle_timeline(state: GameState) -> List[dict[str, object]]:
+    timeline: List[dict[str, object]] = []
+    for turn in state.history:
+        timeline.append(
+            {
+                "turn": turn.turn,
+                "sequence": turn.sequence,
+                "cards": turn.card_names,
+                "intent": turn.enemy_intent,
+                "phase": turn.enemy_phase,
+                "passed_constraint": turn.passed_constraint,
+                "note": turn.note,
+            }
+        )
+    return timeline

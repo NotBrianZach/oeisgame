@@ -16,9 +16,12 @@ This repository now includes a minimal combat loop with:
 - Multi-phase boss encounters with phase-specific intent cycles.
 - Run sessions with seeded 5–8 node maps ending in a boss.
 - Post-combat reward choices (heal, upgrade, add card).
+- Card rarity tiers and weighted reward pulls from a 30+ card library.
+- Encounter pools for normal / elite / boss map generation.
 - A few enemies with constraints + scoring functions.
-- Two starter bosses with escalating phase pressure.
+- Eight+ enemies total including two multi-phase bosses.
 - Turn-by-turn battle logging.
+- Thin built-in web demo for sequence timeline visualization.
 
 ## Project layout
 
@@ -31,6 +34,14 @@ This repository now includes a minimal combat loop with:
 ```bash
 python3 src/main.py
 ```
+
+## Run the web demo (M5 thin UI)
+
+```bash
+python3 src/web.py
+```
+
+Then open `http://127.0.0.1:8080` and click **Run Demo Battle** to view sequence timeline, played cards, and enemy intents using the same engine.
 
 Tip: pressing Enter on the prompt now uses a short rollout recommendation (3-step lookahead) to pick a card automatically.
 During run rewards, pressing Enter takes the first option.
@@ -58,9 +69,9 @@ See `ROADMAP.md` for milestone planning and an actionable sprint backlog.
 
 ## Next implementation steps
 
-1. Persist run state in-session and add restart/resume UX.
-2. Add deterministic reward pools by rarity for balancing passes.
-3. Split engine code into modules (`engine/combat.py`, `engine/run.py`) before web UI work.
+1. Add map branching choices between node options.
+2. Add relic-lite passive rewards with trigger text in logs.
+3. Promote web demo into an interactive card-choice UI.
 
 ## Roadmap look-ahead
 
