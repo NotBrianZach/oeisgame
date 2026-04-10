@@ -8,6 +8,7 @@ from src.oeisgame import (
     play_battle,
     prime_score,
     recommend_card_by_rollout,
+    starter_bosses,
     starter_deck,
     starter_enemies,
     start_turn,
@@ -161,7 +162,7 @@ def test_enemy_intents_cycle_deterministically():
     assert state.history[0].enemy_intent == "Growth Suppressor"
     assert state.history[0].telegraphed_intent == "Tail Shear"
     assert state.history[1].enemy_intent == "Tail Shear"
-    assert state.history[1].telegraphed_intent == "Growth Suppressor"
+    assert state.history[1].telegraphed_intent == "Predator Momentum"
 
 
 def test_enemy_intent_effect_applies_after_player_turn():
@@ -173,6 +174,7 @@ def test_enemy_intent_effect_applies_after_player_turn():
         intent_cycle=[
             EnemyIntent(
                 name="Clip",
+                kind="disrupt",
                 description="Remove latest term",
                 apply_effect=lambda s: s[:-1] if len(s) > 1 else s,
             )
@@ -188,5 +190,51 @@ def test_enemy_intent_effect_applies_after_player_turn():
     )
 
     assert state.history[0].enemy_intent == "Clip"
-    assert "Enemy intent Clip" in state.history[0].note
+    assert "Enemy intent Clip [disrupt]" in state.history[0].note
     assert state.sequence == [1]
+
+
+def test_starter_enemies_have_multi_type_intent_tables():
+    for enemy in starter_enemies():
+        assert enemy.intent_cycle is not None
+        kinds = {intent.kind for intent in enemy.intent_cycle}
+        assert len(kinds) >= 2
+
+
+def test_starter_bosses_have_phases_and_boss_flag():
+    bosses = starter_bosses()
+    assert len(bosses) >= 2
+    for boss in bosses:
+        assert boss.is_boss
+        assert boss.phases is not None
+        assert len(boss.phases) >= 2
+
+
+def test_boss_phase_transitions_and_telegraphs():
+    boss = starter_bosses()[0]
+    state = play_battle(deck=starter_deck(), enemy=boss, turns=4, enemy_hp=999)
+
+    assert state.history[0].enemy_phase == "Sanctum Gate"
+    assert state.history[0].enemy_intent == "Choir of Noise"
+    assert state.history[1].enemy_phase == "Sanctum Gate"
+    assert state.history[1].enemy_intent == "Pillar Shear"
+    assert state.history[2].enemy_phase == "Ratio Sermon"
+    assert state.history[2].enemy_intent == "Suppressive Litany"
+    assert state.history[3].enemy_phase == "Ratio Sermon"
+    assert state.history[3].enemy_intent == "Escalation Canticle"
+
+
+def test_boss_phase_penalty_applies():
+    boss = starter_bosses()[0]
+    state = play_battle(
+        deck=starter_deck(),
+        enemy=boss,
+        turns=1,
+        player_hp=10,
+        starting_sequence=[1],
+        energy_per_turn=0,
+        enemy_hp=999,
+    )
+
+    # turn 1 is in Sanctum Gate phase with a fail penalty of 2.
+    assert state.player_hp <= 8
