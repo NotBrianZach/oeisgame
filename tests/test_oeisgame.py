@@ -2,12 +2,14 @@ from src.oeisgame import (
     Card,
     Enemy,
     EnemyIntent,
+    generate_run_map,
     has_three_primes_in_first_six,
     initialize_combat_deck,
     no_repeats,
     play_battle,
     prime_score,
     recommend_card_by_rollout,
+    run_single_session,
     starter_bosses,
     starter_deck,
     starter_enemies,
@@ -238,3 +240,30 @@ def test_boss_phase_penalty_applies():
 
     # turn 1 is in Sanctum Gate phase with a fail penalty of 2.
     assert state.player_hp <= 8
+
+
+def test_generate_run_map_has_final_boss_node():
+    generated = generate_run_map(seed=5, nodes=6)
+    assert len(generated) == 6
+    assert generated[-1].node_type == "boss"
+    assert generated[-1].enemy is not None
+    assert generated[-1].enemy.is_boss
+
+
+def test_run_session_progresses_and_records_rewards():
+    state = run_single_session(seed=11, nodes=6)
+    assert state.node_position >= 1
+    assert len(state.battle_logs) >= 1
+    assert len(state.rewards_taken) >= 1
+
+
+def test_run_reward_upgrade_reduces_cost():
+    def pick_upgrade(_run_state, options):
+        for idx, option in enumerate(options):
+            if option.kind == "upgrade":
+                return idx
+        return 0
+
+    state = run_single_session(seed=2, nodes=5, reward_chooser=pick_upgrade)
+    upgraded_cards = [card for card in state.deck if card.name.endswith("+")]
+    assert len(upgraded_cards) >= 1

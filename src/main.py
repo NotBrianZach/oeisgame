@@ -5,10 +5,13 @@ from typing import List, Optional
 from oeisgame import (
     Card,
     Enemy,
+    RewardOption,
+    RunState,
     Sequence,
     format_battle_log,
     play_battle,
     recommend_card_by_rollout,
+    run_single_session,
     starter_bosses,
     starter_deck,
     starter_enemies,
@@ -52,15 +55,36 @@ def cli_chooser(
 
 
 def main() -> None:
-    deck = starter_deck()
-    for enemy in starter_enemies():
-        state = play_battle(deck=deck, enemy=enemy, chooser=cli_chooser)
-        print(format_battle_log(state, enemy))
-        print("-" * 80)
-    for boss in starter_bosses():
-        state = play_battle(deck=deck, enemy=boss, chooser=cli_chooser, enemy_hp=45, turns=8)
-        print(format_battle_log(state, boss))
-        print("=" * 80)
+    def reward_cli_chooser(run_state: RunState, options: List[RewardOption]) -> int:
+        print("\nReward choice:")
+        print(f"HP: {run_state.player_hp}/{run_state.max_hp}")
+        for idx, opt in enumerate(options):
+            print(f"  [{idx}] {opt.description}")
+        try:
+            raw = input("Pick reward index (Enter=0): ").strip()
+        except EOFError:
+            raw = ""
+        if raw == "":
+            return 0
+        try:
+            return int(raw)
+        except ValueError:
+            return 0
+
+    state = run_single_session(
+        seed=7,
+        nodes=6,
+        chooser=cli_chooser,
+        reward_chooser=reward_cli_chooser,
+    )
+    print(f"\nRun seed: {state.seed}")
+    for idx, log in enumerate(state.battle_logs, start=1):
+        print(f"\n=== Encounter {idx} ===")
+        print(log)
+    print("\nRewards taken:")
+    for reward in state.rewards_taken:
+        print(f"- {reward}")
+    print(f"Final HP: {state.player_hp}/{state.max_hp}")
 
 
 if __name__ == "__main__":
