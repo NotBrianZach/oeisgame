@@ -1,5 +1,7 @@
 from src.oeisgame import (
     Card,
+    Enemy,
+    EnemyIntent,
     has_three_primes_in_first_six,
     initialize_combat_deck,
     no_repeats,
@@ -81,7 +83,12 @@ def test_invalid_selection_is_guarded():
 
 
 def test_turn_can_play_multiple_cards():
-    enemy = starter_enemies()[0]
+    enemy = Enemy(
+        name="Training Dummy",
+        description="No enemy intent effects.",
+        constraint=lambda s: True,
+        score=lambda s: len(s),
+    )
 
     def chooser(_seq, _enemy, _turn, _hand, _energy):
         return 0
@@ -145,3 +152,41 @@ def test_rollout_returns_none_when_no_affordable_card():
     )
 
     assert selected is None
+
+
+def test_enemy_intents_cycle_deterministically():
+    enemy = starter_enemies()[0]
+    state = play_battle(deck=starter_deck(), enemy=enemy, turns=2)
+
+    assert state.history[0].enemy_intent == "Growth Suppressor"
+    assert state.history[0].telegraphed_intent == "Tail Shear"
+    assert state.history[1].enemy_intent == "Tail Shear"
+    assert state.history[1].telegraphed_intent == "Growth Suppressor"
+
+
+def test_enemy_intent_effect_applies_after_player_turn():
+    enemy = Enemy(
+        name="Truncator",
+        description="Truncates sequence",
+        constraint=lambda s: True,
+        score=lambda s: len(s),
+        intent_cycle=[
+            EnemyIntent(
+                name="Clip",
+                description="Remove latest term",
+                apply_effect=lambda s: s[:-1] if len(s) > 1 else s,
+            )
+        ],
+    )
+    deck = [Card("Plus Nine", lambda s: s + [9], cost=1)]
+    state = play_battle(
+        deck=deck,
+        enemy=enemy,
+        turns=1,
+        starting_sequence=[1],
+        energy_per_turn=1,
+    )
+
+    assert state.history[0].enemy_intent == "Clip"
+    assert "Enemy intent Clip" in state.history[0].note
+    assert state.sequence == [1]
