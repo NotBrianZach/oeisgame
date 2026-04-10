@@ -21,7 +21,9 @@ This repository now includes a minimal combat loop with:
 - A few enemies with constraints + scoring functions.
 - Eight+ enemies total including two multi-phase bosses.
 - Turn-by-turn battle logging.
-- Thin built-in web demo for sequence timeline visualization.
+- Interactive built-in web demo with per-turn card choices.
+- Branching run-map links with selectable next-node options.
+- Relic-lite passive rewards that trigger during battle turns.
 
 ## Project layout
 
@@ -41,7 +43,7 @@ python3 src/main.py
 python3 src/web.py
 ```
 
-Then open `http://127.0.0.1:8080` and click **Run Demo Battle** to view sequence timeline, played cards, and enemy intents using the same engine.
+Then open `http://127.0.0.1:8080`, pick an enemy, and click **Start Battle** to play cards turn-by-turn in the browser.
 
 Tip: pressing Enter on the prompt now uses a short rollout recommendation (3-step lookahead) to pick a card automatically.
 During run rewards, pressing Enter takes the first option.

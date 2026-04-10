@@ -10,6 +10,7 @@ from src.oeisgame import (
     no_repeats,
     play_battle,
     prime_score,
+    relic_library,
     recommend_card_by_rollout,
     run_single_session,
     run_summary,
@@ -251,6 +252,12 @@ def test_generate_run_map_has_final_boss_node():
     assert generated[-1].node_type == "boss"
     assert generated[-1].enemy is not None
     assert generated[-1].enemy.is_boss
+    assert generated[0].next_indices
+
+
+def test_generate_run_map_has_branch_choice():
+    generated = generate_run_map(seed=7, nodes=7)
+    assert len(generated[0].next_indices) >= 2
 
 
 def test_run_session_progresses_and_records_rewards():
@@ -258,6 +265,17 @@ def test_run_session_progresses_and_records_rewards():
     assert state.node_position >= 1
     assert len(state.battle_logs) >= 1
     assert len(state.rewards_taken) >= 1
+
+
+def test_relic_triggers_are_logged_in_battle_notes():
+    relic = relic_library()[0]
+    state = play_battle(
+        deck=starter_deck(),
+        enemy=starter_enemies()[0],
+        turns=1,
+        relics=[relic],
+    )
+    assert "Relic Lantern Chip" in state.history[0].note
 
 
 def test_run_reward_upgrade_reduces_cost():

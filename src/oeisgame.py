@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 import random
 from typing import Callable, Iterable, List, Optional
 
@@ -117,6 +117,7 @@ class MapNode:
     node_type: str
     label: str
     enemy: Optional[Enemy] = None
+    next_indices: List[int] = field(default_factory=list)
 
 
 @dataclass
@@ -137,12 +138,22 @@ class RunState:
     battle_logs: List[str] | None = None
     rewards_taken: List[str] | None = None
     nodes_cleared: int = 0
+    relics: List["RelicLite"] | None = None
 
     def __post_init__(self) -> None:
         if self.battle_logs is None:
             self.battle_logs = []
         if self.rewards_taken is None:
             self.rewards_taken = []
+        if self.relics is None:
+            self.relics = []
+
+
+@dataclass
+class RelicLite:
+    name: str
+    description: str
+    on_turn_start: Optional[Callable[[Sequence, int, int], tuple[Sequence, int, str]]] = None
 
 
 def _append_sum(seq: Sequence) -> Sequence:
@@ -651,6 +662,14 @@ def generate_run_map(seed: int, nodes: int = 6) -> List[MapNode]:
             enemy=boss,
         )
     )
+    for i, node in enumerate(generated):
+        if i >= len(generated) - 1:
+            node.next_indices = []
+            continue
+        base_next = i + 2
+        node.next_indices = [base_next]
+        if i % 2 == 0 and i < len(generated) - 2:
+            node.next_indices.append(base_next + 1)
     return generated
 
 
@@ -849,6 +868,7 @@ def play_battle(
     hand_size: int = 3,
     energy_per_turn: int = 3,
     chooser: Optional[CardChooser] = None,
+    relics: Optional[List[RelicLite]] = None,
 ) -> GameState:
     sequence = list(starting_sequence or [1])
     if not sequence:
@@ -864,6 +884,12 @@ def play_battle(
         cards_played: List[str] = []
         turn_notes: List[str] = []
         total_damage = 0
+        for relic in relics or []:
+            if relic.on_turn_start is None:
+                continue
+            sequence, energy, trigger_text = relic.on_turn_start(sequence, turn, energy)
+            if trigger_text:
+                turn_notes.append(f"Relic {relic.name}: {trigger_text}")
         current_phase, _ = _phase_for_turn(enemy, turn)
         current_intent = _intent_for_turn(enemy, turn)
         next_intent = _intent_for_turn(enemy, turn + 1)
@@ -986,6 +1012,10 @@ def _create_reward_options(run_state: RunState, rng: random.Random) -> List[Rewa
         candidates = [card for card in card_library() if card.rarity == rarity]
         rs.deck.append(candidates[rng.randrange(len(candidates))])
 
+    def _new_relic(rs: RunState) -> None:
+        pool = relic_library()
+        rs.relics.append(pool[rng.randrange(len(pool))])
+
     return [
         RewardOption(kind="heal", description="Recover 3 HP", apply_reward=_heal),
         RewardOption(
@@ -994,6 +1024,30 @@ def _create_reward_options(run_state: RunState, rng: random.Random) -> List[Rewa
             apply_reward=_upgrade,
         ),
         RewardOption(kind="card", description="Add a utility card", apply_reward=_new_card),
+        RewardOption(kind="relic", description="Gain a relic-lite passive", apply_reward=_new_relic),
+    ]
+
+
+def relic_library() -> List[RelicLite]:
+    return [
+        RelicLite(
+            name="Lantern Chip",
+            description="Turn 1 starts with +1 energy.",
+            on_turn_start=lambda seq, turn, energy: (
+                list(seq),
+                energy + 1 if turn == 1 else energy,
+                "+1 energy on opening turn." if turn == 1 else "",
+            ),
+        ),
+        RelicLite(
+            name="Echo Coil",
+            description="Even turns duplicate the latest term before you act.",
+            on_turn_start=lambda seq, turn, energy: (
+                list(seq) + [seq[-1]] if turn % 2 == 0 else list(seq),
+                energy,
+                "duplicated latest term." if turn % 2 == 0 else "",
+            ),
+        ),
     ]
 
 
@@ -1002,6 +1056,7 @@ def run_single_session(
     nodes: int = 6,
     chooser: Optional[CardChooser] = None,
     reward_chooser: Optional[RewardChooser] = None,
+    path_chooser: Optional[Callable[[RunState, MapNode, List[MapNode]], int]] = None,
 ) -> RunState:
     rng = random.Random(seed)
     run_state = RunState(
@@ -1011,40 +1066,63 @@ def run_single_session(
         max_hp=25,
         map_nodes=generate_run_map(seed=seed, nodes=nodes),
     )
-    for node in run_state.map_nodes:
+    index_lookup = {node.index: node for node in run_state.map_nodes}
+    node = run_state.map_nodes[0]
+    while True:
         run_state.node_position = node.index
+        should_end = False
         if node.node_type in ("event",):
             run_state.player_hp = min(run_state.max_hp, run_state.player_hp + 1)
             run_state.battle_logs.append(f"{node.label}: quiet archive event (+1 HP).")
-            continue
-        if node.node_type in ("rest",):
+        elif node.node_type in ("rest",):
             run_state.player_hp = min(run_state.max_hp, run_state.player_hp + 5)
             run_state.battle_logs.append(f"{node.label}: rested (+5 HP).")
-            continue
-        if node.enemy is None:
-            continue
+        elif node.enemy is not None:
+            battle = play_battle(
+                deck=run_state.deck,
+                enemy=node.enemy,
+                chooser=chooser,
+                player_hp=run_state.player_hp,
+                enemy_hp=45 if node.node_type == "boss" else 30,
+                turns=8 if node.node_type == "boss" else 6,
+                relics=run_state.relics,
+            )
+            run_state.player_hp = battle.player_hp
+            run_state.battle_logs.append(format_battle_log(battle, node.enemy))
+            if run_state.player_hp <= 0:
+                should_end = True
 
-        battle = play_battle(
-            deck=run_state.deck,
-            enemy=node.enemy,
-            chooser=chooser,
-            player_hp=run_state.player_hp,
-            enemy_hp=45 if node.node_type == "boss" else 30,
-            turns=8 if node.node_type == "boss" else 6,
-        )
-        run_state.player_hp = battle.player_hp
-        run_state.battle_logs.append(format_battle_log(battle, node.enemy))
-        if run_state.player_hp <= 0:
-            break
-
-        if node.node_type in ("combat", "elite"):
+        if not should_end and node.node_type in ("combat", "elite"):
             options = _create_reward_options(run_state, rng)
             pick = 0 if reward_chooser is None else reward_chooser(run_state, options)
             pick = max(0, min(len(options) - 1, pick))
             chosen = options[pick]
             chosen.apply_reward(run_state)
-            run_state.rewards_taken.append(chosen.description)
+            if chosen.kind == "relic":
+                new_relic = run_state.relics[-1]
+                run_state.rewards_taken.append(f"{chosen.description}: {new_relic.name}")
+                run_state.battle_logs.append(
+                    f"Reward: obtained relic {new_relic.name} ({new_relic.description})"
+                )
+            else:
+                run_state.rewards_taken.append(chosen.description)
             run_state.nodes_cleared += 1
+        if should_end or not node.next_indices:
+            break
+        options = [index_lookup[idx] for idx in node.next_indices if idx in index_lookup]
+        if not options:
+            break
+        if path_chooser is None:
+            selected = 0
+        else:
+            selected = max(0, min(len(options) - 1, path_chooser(run_state, node, options)))
+        next_node = options[selected]
+        if len(options) > 1:
+            option_labels = ", ".join(f"{i}:{opt.label}" for i, opt in enumerate(options))
+            run_state.battle_logs.append(
+                f"Branch at Node {node.index} -> options [{option_labels}] -> chose {next_node.label}"
+            )
+        node = next_node
 
     return run_state
 
