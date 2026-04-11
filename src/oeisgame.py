@@ -139,6 +139,8 @@ class RunState:
     rewards_taken: List[str] | None = None
     nodes_cleared: int = 0
     relics: List["RelicLite"] | None = None
+    ascension_level: int = 0
+    ascension_modifiers: List[str] | None = None
 
     def __post_init__(self) -> None:
         if self.battle_logs is None:
@@ -147,6 +149,21 @@ class RunState:
             self.rewards_taken = []
         if self.relics is None:
             self.relics = []
+        if self.ascension_modifiers is None:
+            self.ascension_modifiers = []
+
+
+ASCENSION_RULES: List[tuple[int, str, str]] = [
+    (1, "A1 Frail Start", "Start each run with -5 max HP worth of current HP."),
+    (2, "A2 Tighter Clock", "Normal and elite combats have 1 fewer turn."),
+    (3, "A3 Lean Rewards", "Combat reward screen offers 2 options instead of 4."),
+]
+
+
+def active_ascension_rules(level: int) -> List[tuple[int, str, str]]:
+    if level < 0:
+        raise ValueError("ascension level must be non-negative")
+    return [rule for rule in ASCENSION_RULES if rule[0] <= level]
 
 
 @dataclass
@@ -1057,15 +1074,27 @@ def run_single_session(
     chooser: Optional[CardChooser] = None,
     reward_chooser: Optional[RewardChooser] = None,
     path_chooser: Optional[Callable[[RunState, MapNode, List[MapNode]], int]] = None,
+    ascension_level: int = 0,
 ) -> RunState:
+    if ascension_level < 0:
+        raise ValueError("ascension_level must be non-negative")
     rng = random.Random(seed)
+    active_rules = active_ascension_rules(ascension_level)
     run_state = RunState(
         seed=seed,
         deck=starter_deck(),
         player_hp=25,
         max_hp=25,
         map_nodes=generate_run_map(seed=seed, nodes=nodes),
+        ascension_level=ascension_level,
+        ascension_modifiers=[name for _, name, _ in active_rules],
     )
+    if ascension_level >= 1:
+        run_state.player_hp = max(1, run_state.max_hp - 5)
+        run_state.battle_logs.append("Ascension A1 active: Frail Start (-5 starting HP).")
+    if run_state.ascension_modifiers:
+        joined = ", ".join(run_state.ascension_modifiers)
+        run_state.battle_logs.append(f"Ascension {ascension_level} active modifiers: {joined}")
     index_lookup = {node.index: node for node in run_state.map_nodes}
     node = run_state.map_nodes[0]
     while True:
@@ -1078,13 +1107,16 @@ def run_single_session(
             run_state.player_hp = min(run_state.max_hp, run_state.player_hp + 5)
             run_state.battle_logs.append(f"{node.label}: rested (+5 HP).")
         elif node.enemy is not None:
+            combat_turns = 8 if node.node_type == "boss" else 6
+            if ascension_level >= 2 and node.node_type in ("combat", "elite"):
+                combat_turns = max(1, combat_turns - 1)
             battle = play_battle(
                 deck=run_state.deck,
                 enemy=node.enemy,
                 chooser=chooser,
                 player_hp=run_state.player_hp,
                 enemy_hp=45 if node.node_type == "boss" else 30,
-                turns=8 if node.node_type == "boss" else 6,
+                turns=combat_turns,
                 relics=run_state.relics,
             )
             run_state.player_hp = battle.player_hp
@@ -1094,6 +1126,8 @@ def run_single_session(
 
         if not should_end and node.node_type in ("combat", "elite"):
             options = _create_reward_options(run_state, rng)
+            if ascension_level >= 3:
+                options = options[:2]
             pick = 0 if reward_chooser is None else reward_chooser(run_state, options)
             pick = max(0, min(len(options) - 1, pick))
             chosen = options[pick]
@@ -1129,7 +1163,8 @@ def run_single_session(
 
 def run_summary(run_state: RunState) -> str:
     return (
-        f"Run seed={run_state.seed} | node={run_state.node_position}/{len(run_state.map_nodes)} | "
+        f"Run seed={run_state.seed} | ascension={run_state.ascension_level} | "
+        f"node={run_state.node_position}/{len(run_state.map_nodes)} | "
         f"hp={run_state.player_hp}/{run_state.max_hp} | combats_cleared={run_state.nodes_cleared} | "
         f"deck_size={len(run_state.deck)} | rewards={len(run_state.rewards_taken or [])}"
     )

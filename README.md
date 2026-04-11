@@ -24,6 +24,7 @@ This repository now includes a minimal combat loop with:
 - Interactive built-in web demo with per-turn card choices.
 - Branching run-map links with selectable next-node options.
 - Relic-lite passive rewards that trigger during battle turns.
+- New Game+ style Ascension levels (A1–A3) for harder run modifiers.
 
 ## Project layout
 
@@ -47,6 +48,7 @@ Then open `http://127.0.0.1:8080`, pick an enemy, and click **Start Battle** to 
 
 Tip: pressing Enter on the prompt now uses a short rollout recommendation (3-step lookahead) to pick a card automatically.
 During run rewards, pressing Enter takes the first option.
+You can also set an Ascension level at run start (Enter defaults to 0).
 
 ## Run tests
 
