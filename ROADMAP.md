@@ -148,6 +148,54 @@ This roadmap turns the current CLI prototype into a replayable deckbuilder with 
 
 ---
 
+## New Game+ sketch (post-M5 / replayability track)
+
+**Goal:** keep runs fresh after first win by adding opt-in escalating modifiers that stress different sequence skills.
+
+### Core model
+
+- Add `ascension_level: int = 0` to `RunState` (0 = base game).
+- Add an `AscensionRule` concept with:
+  - `name`
+  - `level_unlock`
+  - `description`
+  - `apply_to_run(run_state)` and/or `apply_to_battle(state)` hooks.
+- At run start, enable all rules with `level_unlock <= ascension_level`.
+
+### Suggested level ladder (A1–A10)
+
+1. **A1: Frail Start** — start each run at `max_hp - 5`.
+2. **A2: Tighter Clock** — normal combats reduced by 1 turn.
+3. **A3: Lean Rewards** — reward screen offers 2 options instead of 3.
+4. **A4: Elite Pressure** — map generator increases elite node frequency.
+5. **A5: Intent Foresight Tax** — enemy intent telegraph hidden every other turn.
+6. **A6: Cost Inflation** — random card in opening hand costs +1 energy this turn.
+7. **A7: Relic Scarcity** — relic reward chance reduced.
+8. **A8: Corruption Pulse** — every 3 turns, append low-amplitude noise term.
+9. **A9: Boss Endurance** — boss HP +20% and phase fail penalty +1.
+10. **A10: Entropy Ceiling** — repeated values incur an extra end-turn HP penalty.
+
+### UX flow
+
+- Main menu adds: `New Run (Ascension X)` and `Change Ascension`.
+- On run start, print active ascension modifiers with short IDs (`A1`, `A2`, ...).
+- Add ascension details to `run_summary` and end-of-run log.
+
+### Balance strategy
+
+- Track win rate by ascension level over fixed seeds.
+- Keep A1–A3 broadly fair for most decks; A7+ should feel meaningfully hard.
+- Avoid “all difficulty = HP inflation”; prefer mechanic diversity (economy, map, intent clarity, constraints).
+
+### Testing checklist
+
+- Unit tests: ascension rule activation by level.
+- Unit tests: map/reward/battle hooks apply deterministically under seeded RNG.
+- Snapshot tests: same seed differs predictably between `ascension=0` vs `ascension=N`.
+- Regression tests: ensure base game (`ascension=0`) behavior remains unchanged.
+
+---
+
 ## Risks and mitigations
 
 - **Risk:** sequence state becomes hard to interpret as effects stack.

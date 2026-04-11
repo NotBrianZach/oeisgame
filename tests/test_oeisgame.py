@@ -1,4 +1,5 @@
 from src.oeisgame import (
+    active_ascension_rules,
     battle_timeline,
     card_library,
     Card,
@@ -308,8 +309,40 @@ def test_run_summary_and_timeline_are_available_for_cli_and_web_views():
     state = run_single_session(seed=7, nodes=6)
     summary = run_summary(state)
     assert "Run seed=7" in summary
+    assert "ascension=0" in summary
 
     battle = play_battle(deck=starter_deck(), enemy=starter_enemies()[0], turns=2)
     timeline = battle_timeline(battle)
     assert len(timeline) == len(battle.history)
     assert "sequence" in timeline[0]
+
+
+def test_ascension_rules_activate_by_level():
+    level_0 = active_ascension_rules(0)
+    level_2 = active_ascension_rules(2)
+    assert level_0 == []
+    assert [name for _, name, _ in level_2] == ["A1 Frail Start", "A2 Tighter Clock"]
+
+
+def test_ascension_applies_starting_hp_and_summary_tag():
+    state = run_single_session(seed=7, nodes=5, ascension_level=1)
+    assert state.max_hp == 25
+    assert state.player_hp <= 20
+    assert "ascension=1" in run_summary(state)
+
+
+def test_ascension_lean_rewards_limits_reward_options():
+    seen_counts: list[int] = []
+
+    def counting_reward_picker(_run_state, options):
+        seen_counts.append(len(options))
+        return 0
+
+    run_single_session(
+        seed=7,
+        nodes=6,
+        ascension_level=3,
+        reward_chooser=counting_reward_picker,
+    )
+    assert seen_counts
+    assert max(seen_counts) <= 2

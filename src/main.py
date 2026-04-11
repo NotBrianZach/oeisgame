@@ -72,11 +72,21 @@ def main() -> None:
         except ValueError:
             return 0
 
+    try:
+        raw_asc = input("Ascension level (Enter=0): ").strip()
+    except EOFError:
+        raw_asc = ""
+    try:
+        ascension_level = int(raw_asc) if raw_asc else 0
+    except ValueError:
+        ascension_level = 0
+
     state = run_single_session(
         seed=7,
         nodes=6,
         chooser=cli_chooser,
         reward_chooser=reward_cli_chooser,
+        ascension_level=ascension_level,
     )
     print(f"\nRun seed: {state.seed}")
     for idx, log in enumerate(state.battle_logs, start=1):
