@@ -50,6 +50,38 @@ Tip: pressing Enter on the prompt now uses a short rollout recommendation (3-ste
 During run rewards, pressing Enter takes the first option.
 You can also set an Ascension level at run start (Enter defaults to 0).
 
+
+## Godot migration prototype
+
+The project now includes a larger Godot 4 migration slice under `godot/` with a reusable engine script and a UI scene.
+
+Run it with Godot 4.x by opening `godot/project.godot`.
+
+Current Godot coverage:
+
+- Shared combat engine script (`godot/scripts/game_engine.gd`) with:
+  - card definitions and sequence transforms,
+  - enemy definitions, encounter pools, and enemy intent cycles,
+  - combat deck flow (draw/hand/discard/exhaust),
+  - turn lifecycle (`start_turn`, `play_card`, `end_turn`),
+  - run-state scaffolding including map nodes, branching node links, and ascension modifiers,
+  - post-combat reward choices.
+- Main UI scene (`godot/scenes/Main.tscn` + `godot/scripts/main.gd`) with:
+  - run/node status display,
+  - playable hand and pile counters,
+  - telegraphed + applied enemy intent display,
+  - post-combat reward picks and next-node branching buttons,
+  - combat log output.
+
+Sequence persistence behavior:
+
+- Sequence state is owned by `CombatState.sequence` and carried across turns within a combat.
+- New combats intentionally restart sequence at `[1]`, matching the Python prototype's battle-start behavior.
+
+Public asset notes:
+
+- See `godot/assets/ASSET_SOURCES.md` for CC0 packs (Kenney) you can drop in.
+
 ## Run tests
 
 ```bash
